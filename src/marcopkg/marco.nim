@@ -28,8 +28,9 @@ type
   ManifestError* = object of CatchableError
 
   ChunkType = enum
-    ctStringPool = 1'u16
-    ctXML = 3'u16
+    ctStringPool = 0x0001'u16
+    ctXML = 0x0003'u16
+    ctXMLResourceMap = 0x0180'u16
 
 const
   nsAndroid = "http://schemas.android.com/apk/res/android"
@@ -40,10 +41,10 @@ const
     KnownAttr(name: "platformBuildVersionName", rawDefault: "9", typ: dtInt),
   ]
   knownResources = [
-    ("compileSdkVersion", 0x01010572),
-    ("compileSdkVersionCodename", 0x01010573),
-    ("label", 0x01010001),
-    ("name", 0x01010003),
+    ("compileSdkVersion", 0x01010572'u32),
+    ("compileSdkVersionCodename", 0x01010573'u32),
+    ("label", 0x01010001'u32),
+    ("name", 0x01010003'u32),
   ].toTable
 
 
@@ -76,13 +77,13 @@ proc marcoCompile*(inputXml: string): string =
   # echo buckets.res #.seq[:string]
   # echo buckets.other #.seq[:string]
 
-  # Emit header
+  # Partially render header
   var res: Blob
   res.put16(ctXML.ord)
   res.put16(8)  # header size
   var fileSizeSlot = res.slot32()
 
-  # Emit list of strings
+  # Render list of strings
   let stringsPos = res.pos
   res.put16(ctStringPool.ord)
   res.put16(0x1c)  # header size
@@ -104,6 +105,15 @@ proc marcoCompile*(inputXml: string): string =
       res.put16(c.ord.uint16)
     res.put16(0)
   res.set(stringsSizeSlot, res.pos - stringsPos)
+
+  # Render "XML resource map"
+  let resMapPos = res.pos
+  res.put16(ctXMLResourceMap.ord)
+  res.put16(8)  # header size
+  let resMapSizeSlot = res.slot32()
+  for s in buckets.res:
+    res.put32(knownResources[s])
+  res.set(resMapSizeSlot, res.pos - resMapPos)
 
   res.set(fileSizeSlot, res.pos)
   result = res.string
