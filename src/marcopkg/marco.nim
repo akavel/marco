@@ -4,6 +4,7 @@ import xmltree
 import xmlparser
 import strtabs
 import sortedset
+import tables
 
 # References:
 # - https://github.com/aosp-mirror/platform_frameworks_base/blob/e5cf74326dc37e87c24016640b535a269499e1ec/tools/aapt/XMLNode.cpp#L1089
@@ -19,6 +20,9 @@ type
     rawDefault: string  # "" means none
     stripRaw: bool
     typ: DataType
+  StringSets = object
+    res: SortedSet[string]
+    other: SortedSet[string]
   ManifestError* = object of CatchableError
 
 const
@@ -29,12 +33,12 @@ const
     KnownAttr(name: "platformBuildVersionCode", rawDefault: "28", typ: dtInt),
     KnownAttr(name: "platformBuildVersionName", rawDefault: "9", typ: dtInt),
   ]
-  knownResources = @[
+  knownResources = [
     ("compileSdkVersion", 0x01010572),
     ("compileSdkVersionCodename", 0x01010573),
     ("label", 0x01010001),
     ("name", 0x01010003),
-  ]
+  ].toTable
 
 
 proc marcoCompile*(inputXml: string): string =
@@ -54,11 +58,14 @@ proc marcoCompile*(inputXml: string): string =
       xml.attrs[attr.name] = attr.rawDefault
 
   # Collect all strings
-  var strings = newSortedSet[string]()
+  var strings = StringSets()
+  init(strings.res)
+  init(strings.other)
   collectStrings(xml, strings)
-  echo strings.seq[:string]
+  echo strings.res.seq[:string]
+  echo strings.other.seq[:string]
 
-proc collectStrings(xml: XmlNode, strings: var SortedSet[string]) =
+proc collectStrings(xml: XmlNode, strings: var StringSets) =
   if xml.kind != xnElement:
     return
   let (ns, tag) = xml.tag.splitQName
@@ -82,4 +89,9 @@ proc splitQName(qname: string): (string, string) =
   else:
     return ("", split[0])
 
+proc incl(strings: var StringSets, item: string) =
+  if item in knownResources:
+    strings.res.incl(item)
+  else:
+    strings.other.incl(item)
 
