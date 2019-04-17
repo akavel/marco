@@ -5,6 +5,7 @@ import xmlparser
 import strtabs
 import sets
 import tables
+import critbits
 
 import blob
 
@@ -30,6 +31,7 @@ type
   ChunkType = enum
     ctStringPool = 0x0001'u16
     ctXML = 0x0003'u16
+    ctXMLStartNS = 0x0100'u16
     ctXMLResourceMap = 0x0180'u16
 
 const
@@ -70,10 +72,13 @@ proc marcoCompile*(inputXml: string): string =
   init(buckets.other)
   collectStrings(xml, buckets)
   var strings = initOrderedSet[string]()
-  for s in buckets.res:
+  var stringsMap: CritBitTree[uint32]
+  for i, s in buckets.res:
     strings.incl(s)
-  for s in buckets.other:
+    stringsMap[s] = i.uint32
+  for i, s in buckets.other:
     strings.incl(s)
+    stringsMap[s] = uint32(buckets.res.len + i)
   # echo buckets.res #.seq[:string]
   # echo buckets.other #.seq[:string]
 
@@ -114,6 +119,10 @@ proc marcoCompile*(inputXml: string): string =
   for s in buckets.res:
     res.put32(knownResources[s])
   res.set(resMapSizeSlot, res.pos - resMapPos)
+
+  # Render XML tree
+  var lineNo = 2'u32
+  renderXML(res, xml, stringsMap, lineNo)
 
   res.set(fileSizeSlot, res.pos)
   result = res.string
@@ -167,3 +176,22 @@ proc incl(strings: var StringSets, item: string) =
   else:
     strings.other.incl(item)
 
+proc renderXML(res: var Blob, xml: XmlNode, stringsMap: CritBitTree[uint32], lineNo: var uint32) =
+  if xml.kind != xnElement:
+    return
+  var ns = false
+  if xml.attrsLen > 0 and "xmlns:android" in xml.attrs:
+    ns = true
+    let (pos, sizeSlot) = res.putXML(ctXMLStartNS, lineNo)
+    res.put32(stringsMap["android"])
+    res.put32(stringsMap[xml.attrs["xmlns:android"]])
+    res.set(sizeSlot, res.pos - pos)
+
+proc putXML(res: var Blob, typ: ChunkType, lineNo: var uint32): tuple[pos: uint32, sizeSlot: Slot32] =
+  result.pos = res.pos
+  res.put16(typ.ord.uint16)
+  res.put16(0x10'u16)
+  result.sizeSlot = res.slot32()
+  res.put32(lineNo)
+  inc(lineNo)
+  res.put32(0xffff_ffff'u32)  # comment index
