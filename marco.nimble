@@ -12,5 +12,3 @@ bin           = @["marco"]
 # Dependencies
 
 requires "nim >= 0.19.4"
-requires "xmltools 0.1.5"
-requires "nimfp"

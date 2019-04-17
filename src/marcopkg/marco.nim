@@ -1,8 +1,8 @@
 {.experimental: "codeReordering".}
 import options
 import xmltree
-import xmltools  # TODO: remove this dependency as it's too big & noisy
-import fp / map  # TODO: also remove this
+import xmlparser
+import strtabs
 
 # References:
 # - https://github.com/aosp-mirror/platform_frameworks_base/blob/e5cf74326dc37e87c24016640b535a269499e1ec/tools/aapt/XMLNode.cpp#L1089
@@ -15,18 +15,18 @@ type
     dtInt = 0x10
   KnownAttr = object
     name: string
-    xmlns: string       # namespace
     rawDefault: string  # "" means none
+    stripRaw: bool
     typ: DataType
-    intDefault: Option[uint32]  # only relevant if typ==dtInt
+  ManifestError* = object of CatchableError
 
 const
   nsAndroid = "http://schemas.android.com/apk/res/android"
   knownManifestAttrs = @[
-    KnownAttr(name: "compileSdkVersion", xmlns: nsAndroid, typ: dtInt, intDefault: some(28'u32)),
-    KnownAttr(name: "compileSdkVersionCodename", xmlns: nsAndroid, rawDefault: "9", typ: dtString),
-    KnownAttr(name: "platformBuildVersionCode", rawDefault: "28", typ: dtInt, intDefault: some(28'u32)),
-    KnownAttr(name: "platformBuildVersionName", rawDefault: "9", typ: dtInt, intDefault: some(9'u32)),
+    KnownAttr(name: "android:compileSdkVersion", rawDefault: "28", typ: dtInt, stripRaw: true),
+    KnownAttr(name: "android:compileSdkVersionCodename", rawDefault: "9", typ: dtString),
+    KnownAttr(name: "platformBuildVersionCode", rawDefault: "28", typ: dtInt),
+    KnownAttr(name: "platformBuildVersionName", rawDefault: "9", typ: dtInt),
   ]
   knownResources = @[
     ("compileSdkVersion", 0x01010572),
@@ -38,14 +38,15 @@ const
 
 proc marcoCompile*(inputXml: string): string =
   let
-    xml = Node.fromStringE(inputXml)
-    namespaces = xml.namespaces
+    xml = parseXml(inputXml)
+  if xml.tag != "manifest":
+    raise newException(ManifestError, "root node must be <manifest>")
+  if not xml.attrs.hasKey("xmlns:android"):
+    raise newException(ManifestError, "the <manifest> node must have 'xmlns:android' attribute")
+  if xml.attrs["xmlns:android"] != nsAndroid:
+    raise newException(ManifestError, "the <manifest> node's attribute 'xmlns:android' must have value \"" & nsAndroid & "\"")
   for attr in knownManifestAttrs:
-    let
-      ns = namespaces.get(attr.xmlns)
-      qname = ns.get("") $: attr.name
-    if xml.attr(qname).isNone:
-      xml.XmlNode.attrs[qname] = attr.rawDefault
+    if attr.name notin xml.attrs:
+      xml.attrs[attr.name] = attr.rawDefault
   echo xml
-
 
