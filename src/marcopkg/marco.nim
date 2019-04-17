@@ -6,6 +6,8 @@ import strtabs
 import sets
 import tables
 
+import blob
+
 # References:
 # - https://github.com/aosp-mirror/platform_frameworks_base/blob/e5cf74326dc37e87c24016640b535a269499e1ec/tools/aapt/XMLNode.cpp#L1089
 # - https://android.googlesource.com/platform/frameworks/base/+/dc36bb6dea837608c29c177a7ea8cf46b6a0cd53/tools/aapt/XMLNode.cpp
@@ -24,6 +26,10 @@ type
     res: OrderedSet[string]
     other: OrderedSet[string]
   ManifestError* = object of CatchableError
+
+  ChunkType = enum
+    ctStringPool = 1'u16
+    ctXML = 3'u16
 
 const
   nsAndroid = "http://schemas.android.com/apk/res/android"
@@ -58,12 +64,49 @@ proc marcoCompile*(inputXml: string): string =
       xml.attrs[attr.name] = attr.rawDefault
 
   # Collect all strings
-  var strings = StringSets()
-  init(strings.res)
-  init(strings.other)
-  collectStrings(xml, strings)
-  echo strings.res #.seq[:string]
-  echo strings.other #.seq[:string]
+  var buckets = StringSets()
+  init(buckets.res)
+  init(buckets.other)
+  collectStrings(xml, buckets)
+  var strings = initOrderedSet[string]()
+  for s in buckets.res:
+    strings.incl(s)
+  for s in buckets.other:
+    strings.incl(s)
+  # echo buckets.res #.seq[:string]
+  # echo buckets.other #.seq[:string]
+
+  # Emit header
+  var res: Blob
+  res.put16(ctXML.ord)
+  res.put16(8)  # header size
+  var fileSizeSlot = res.slot32()
+
+  # Emit list of strings
+  let stringsPos = res.pos
+  res.put16(ctStringPool.ord)
+  res.put16(0x1c)  # header size
+  var stringsSizeSlot = res.slot32()
+  res.put32(uint32(strings.len))
+  res.put32(0)  # style count
+  res.put32(0)  # flags TODO(akavel): try writing utf-8, not utf-16
+  var stringsStartSlot = res.slot32()
+  res.put32(0)  # styles start
+  var stringOffsetSlots = newSeq[Slot32]()
+  for i in 0 ..< strings.len:
+    stringOffsetSlots.add(res.slot32())
+  let stringsStartPos = res.pos
+  res.set(stringsStartSlot, stringsStartPos - stringsPos)
+  for i, s in strings:
+    res.set(stringOffsetSlots[i], res.pos - stringsStartPos)
+    res.put16(s.len.uint16)  # TODO: handle longer strings
+    for c in s:
+      res.put16(c.ord.uint16)
+    res.put16(0)
+  res.set(stringsSizeSlot, res.pos - stringsPos)
+
+  res.set(fileSizeSlot, res.pos)
+  result = res.string
 
 proc collectStrings(xml: XmlNode, strings: var StringSets) =
   if xml.kind != xnElement:
@@ -96,7 +139,7 @@ proc collectStrings(xml: XmlNode, strings: var StringSets) =
         continue
       strVals.add(v)
   let (ns, tag) = xml.tag.splitQName
-  for s in strNs & strKeys & @[tag] & strVals:
+  for s in strNs & @[""] & strKeys & @[tag] & strVals:
     strings.incl(s)
   for child in xml:
     collectStrings(child, strings)
