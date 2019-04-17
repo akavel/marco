@@ -3,6 +3,7 @@ import options
 import xmltree
 import xmlparser
 import strtabs
+import sortedset
 
 # References:
 # - https://github.com/aosp-mirror/platform_frameworks_base/blob/e5cf74326dc37e87c24016640b535a269499e1ec/tools/aapt/XMLNode.cpp#L1089
@@ -37,6 +38,7 @@ const
 
 
 proc marcoCompile*(inputXml: string): string =
+  # Parse + verify namespaces in a dumb, hacky way
   let
     xml = parseXml(inputXml)
   if xml.tag != "manifest":
@@ -45,8 +47,39 @@ proc marcoCompile*(inputXml: string): string =
     raise newException(ManifestError, "the <manifest> node must have 'xmlns:android' attribute")
   if xml.attrs["xmlns:android"] != nsAndroid:
     raise newException(ManifestError, "the <manifest> node's attribute 'xmlns:android' must have value \"" & nsAndroid & "\"")
+
+  # Set default attributes if necessary
   for attr in knownManifestAttrs:
     if attr.name notin xml.attrs:
       xml.attrs[attr.name] = attr.rawDefault
-  echo xml
+
+  # Collect all strings
+  var strings = newSortedSet[string]()
+  collectStrings(xml, strings)
+  echo strings.seq[:string]
+
+proc collectStrings(xml: XmlNode, strings: var SortedSet[string]) =
+  if xml.kind != xnElement:
+    return
+  let (ns, tag) = xml.tag.splitQName
+  strings.incl(tag)
+  if xml.attrsLen > 0:
+    for k, v in xml.attrs:
+      if k == "xmlns":
+        continue
+      let (ns, attr) = k.splitQName
+      if ns == "xmlns":
+        continue
+      strings.incl(attr)
+      strings.incl(v)
+  for child in xml:
+    collectStrings(child, strings)
+
+proc splitQName(qname: string): (string, string) =
+  let split = qname.split(":")
+  if split.len > 1:
+    return (split[0], split[1])
+  else:
+    return ("", split[0])
+
 
