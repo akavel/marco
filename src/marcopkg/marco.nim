@@ -32,6 +32,9 @@ type
     ctStringPool = 0x0001'u16
     ctXML = 0x0003'u16
     ctXMLStartNS = 0x0100'u16
+    ctXMLEndNS = 0x0101'u16
+    ctXMLStartElement = 0x0102'u16
+    ctXMLEndElement = 0x0103'u16
     ctXMLResourceMap = 0x0180'u16
 
 const
@@ -179,10 +182,74 @@ proc incl(strings: var StringSets, item: string) =
 proc renderXML(res: var Blob, xml: XmlNode, stringsMap: CritBitTree[uint32], lineNo: var uint32) =
   if xml.kind != xnElement:
     return
-  var ns = false
+
+  # Open new XML namespace, if needed
+  var newNS = false
   if xml.attrsLen > 0 and "xmlns:android" in xml.attrs:
-    ns = true
+    # TODO: generalize to fully properly handle namespaces
+    # (current code only handles xmlns:android)
+    newNS = true
     let (pos, sizeSlot) = res.putXML(ctXMLStartNS, lineNo)
+    dec(lineNo)
+    res.put32(stringsMap["android"])
+    res.put32(stringsMap[xml.attrs["xmlns:android"]])
+    res.set(sizeSlot, res.pos - pos)
+
+  # Render XML element start
+  let (pos, sizeSlot) = res.putXML(ctXMLStartElement, lineNo)
+  let (ns, tag) = xml.tag.splitQName
+  res.put32(0xffff_ffff'u32)  # TODO: handle namespaces
+  res.put32(stringsMap[tag])
+  res.put16(0x14'u16)  # attr start
+  res.put16(0x14'u16)  # attr size
+  var attrs = xml.attrs.stripNamespaces()
+  res.put16(attrs.len.uint16)
+  res.put16(0)  # ID index
+  res.put16(0)  # class index
+  res.put16(0)  # style index
+
+  # Render attributes
+  for k, v in attrs:
+    echo k, "=", v
+    let (ns, attr) = k.splitQName
+    if ns == "android":
+      res.put32(stringsMap[nsAndroid])
+    else:
+      res.put32(0xffff_ffff'u32)  # TODO: handle other namespaces too
+    res.put32(stringsMap[attr])
+    var
+      typ = dtString
+      raw = stringsMap[v]
+      stripRaw = false
+      data = raw
+      isKnown = isKnownManifestAttr(k)
+    if tag == "manifest" and isKnown.isSome:
+      typ = isKnown.get.typ
+      if isKnown.get.stripRaw:
+        raw = 0xffff_ffff'u32
+    res.put32(raw)
+    res.put16(8)      # size
+    res.putc(chr(0))  # res0
+    res.putc(chr(typ.ord))
+    if typ == dtInt:
+      data = v.parseInt.uint32
+    res.put32(data)
+  res.set(sizeSlot, res.pos - pos)
+
+  # Render child elements
+  for child in xml:
+    renderXML(res, child, stringsMap, lineNo)
+
+  # Render XML element end
+  let (posEnd, sizeSlotEnd) = res.putXML(ctXMLEndElement, lineNo)
+  res.put32(0xffff_ffff'u32)  # TODO: handle namespaces
+  res.put32(stringsMap[tag])
+  res.set(sizeSlotEnd, res.pos - posEnd)
+
+  # Close an XML namespace, if needed
+  if newNS:
+    dec(lineNo)
+    let (pos, sizeSlot) = res.putXML(ctXMLEndNS, lineNo)
     res.put32(stringsMap["android"])
     res.put32(stringsMap[xml.attrs["xmlns:android"]])
     res.set(sizeSlot, res.pos - pos)
@@ -195,3 +262,16 @@ proc putXML(res: var Blob, typ: ChunkType, lineNo: var uint32): tuple[pos: uint3
   res.put32(lineNo)
   inc(lineNo)
   res.put32(0xffff_ffff'u32)  # comment index
+
+proc stripNamespaces(attrs: XmlAttributes): CritBitTree[string] =
+  if attrs == nil:
+    return
+  for k, v in attrs:
+    if k != "xmlns" and not k.startsWith("xmlns:"):
+      result[k] = v
+
+proc isKnownManifestAttr(name: string): Option[KnownAttr] =
+  for attr in knownManifestAttrs:
+    if attr.name == name:
+      return some(attr)
+
