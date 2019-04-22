@@ -22,9 +22,6 @@ type
     rawDefault: string  # "" means none
     stripRaw: bool
     typ: DataType
-  StringSets = object
-    res: OrderedSet[string]
-    other: OrderedSet[string]
   ManifestError* = object of CatchableError
 
 const
@@ -60,18 +57,15 @@ proc marcoCompile*(inputXml: string): string =
       xml.attrs[attr.name] = attr.rawDefault
 
   # Collect all strings
-  var buckets = StringSets()
-  init(buckets.res)
-  init(buckets.other)
-  collectStrings(xml, buckets)
-  var strings = initOrderedSet[string]()
+  let (resources, nonResources) = collectStrings(xml)
+  var strings = newSeq[string]()
   var stringsMap: CritBitTree[uint32]
-  for i, s in buckets.res:
-    strings.incl(s)
+  for i, s in resources:
+    strings.add(s)
     stringsMap[s] = i.uint32
-  for i, s in buckets.other:
-    strings.incl(s)
-    stringsMap[s] = uint32(buckets.res.len + i)
+  for i, s in nonResources:
+    strings.add(s)
+    stringsMap[s] = uint32(resources.len + i)
   # echo buckets.res #.seq[:string]
   # echo buckets.other #.seq[:string]
 
@@ -109,7 +103,7 @@ proc marcoCompile*(inputXml: string): string =
   res.put16(ctXMLResourceMap.ord)
   res.put16(8)  # header size
   let resMapSizeSlot = res.slot32()
-  for s in buckets.res:
+  for s in resources:
     res.put32(knownResources[s])
   res.set(resMapSizeSlot, res.pos - resMapPos)
 
@@ -120,18 +114,31 @@ proc marcoCompile*(inputXml: string): string =
   res.set(fileSizeSlot, res.pos)
   result = res.string
 
-proc collectStrings(xml: XmlNode, strings: var StringSets) =
+proc collectStrings(xml: XmlNode): (OrderedSet[string], OrderedSet[string]) =
   if xml.kind != xnElement:
     return
-  strings.incl(xml.tag.splitQName().name)
-  if xml.attrsLen > 0:
-    for k, v in xml.attrs:
-      # TODO: handle namespaces & namespace definitions
-      # (xmlns) properly
-      strings.incl(k.splitQName().name)
-      strings.incl(v)
-  for child in xml:
-    collectStrings(child, strings)
+  var
+    resources = initOrderedSet[string]()
+    other = initOrderedSet[string]()
+  # Helper funcs
+  proc incl(s: string) =
+    if s in knownResources:
+      resources.incl(s)
+    else:
+      other.incl(s)
+  proc recurse(xml: XmlNode) =
+    incl(xml.tag.splitQName().name)
+    if xml.attrsLen > 0:
+      for k, v in xml.attrs:
+        # TODO: handle namespaces & namespace definitions
+        # (xmlns) properly
+        incl(k.splitQName().name)
+        incl(v)
+    for child in xml:
+      recurse(child)
+  # Proper body of the proc
+  recurse(xml)
+  return (resources, other)
 
 proc splitQName(qname: string): tuple[ns: string, name: string] =
   ## Split XML "qualified name" (namespace:name) to the
@@ -143,12 +150,6 @@ proc splitQName(qname: string): tuple[ns: string, name: string] =
     return (split[0], split[1])
   else:
     return ("", split[0])
-
-proc incl(strings: var StringSets, item: string) =
-  if item in knownResources:
-    strings.res.incl(item)
-  else:
-    strings.other.incl(item)
 
 proc renderXML(res: var Blob, xml: XmlNode, stringsMap: CritBitTree[uint32], lineNo: var uint32) =
   if xml.kind != xnElement:
