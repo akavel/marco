@@ -1,6 +1,7 @@
 {.experimental: "codeReordering".}
 import unittest
 import streams
+import re
 include marcopkg / dump
 
 test "Custom binary AndroidManifest.xml dump":
@@ -98,16 +99,24 @@ ffff ffff 0e00 0000 0301 1000 1800 0000
 0400 0000 0500 0000
 """.dehexify
   let dump = marcoDump(newStringStream(binary))
-  let expected = """
+  let expected = purgeLineMarkers"""
+Binary XML
 N: android=http://schemas.android.com/apk/res/android (line=2)
   E: manifest (line=2)
     A: http://schemas.android.com/apk/res/android:compileSdkVersion(0x01010572)=28
-    A: http://schemas.android.com/apk/res/android:compileSdkVersionCodename(0x10100573)="9" (Raw: "9")
+    A: http://schemas.android.com/apk/res/android:compileSdkVersionCodename(0x01010573)="9" (Raw: "9")
     A: package="com.akavel.hello" (Raw: "com.akavel.hello")
+    A: platformBuildVersionCode=28 (Raw: "28")
+    A: platformBuildVersionName=9 (Raw: "9")
       E: application (line=4)
-        A: https://schemas.android.com/apk/res/android:label="HelloDali" (Raw: "HelloDali")
+        A: http://schemas.android.com/apk/res/android:label(0x01010001)="HelloDali" (Raw: "HelloDali")
           E: activity (line=5)
-            A: https://schemas.android.com/apk/res/android:name="HelloDali" (Raw: "HelloDali")
+            A: http://schemas.android.com/apk/res/android:name(0x01010003)="HelloActivity" (Raw: "HelloActivity")
+              E: intent-filter (line=6)
+                  E: action (line=7)
+                    A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.intent.action.MAIN" (Raw: "android.intent.action.MAIN")
+                  E: category (line=8)
+                    A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.intent.category.LAUNCHER" (Raw: "android.intent.category.LAUNCHER")
 """
   check dump == expected
 
@@ -149,4 +158,7 @@ proc dumpHex(s: string): string =
 func printable(c: char): bool =
   let n = ord(c)
   return 0x21 <= n and n <= 0x7E
+
+func purgeLineMarkers(s: string): string {.inline.} =
+  return s.replace(re(r" \(line=\d+\)$", {reStudy, reMultiLine}))
 

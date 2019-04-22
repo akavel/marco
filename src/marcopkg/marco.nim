@@ -3,6 +3,7 @@ import options
 import xmltree
 import xmlparser
 import strtabs
+import strutils
 import sets
 import tables
 import critbits

@@ -16,6 +16,7 @@ proc marcoDump(inputBin: Stream): string =
 
   # File header
   s.expect(ctXML.ord.uint16)
+  result.add("Binary XML\n")
   s.expect(8'u16)  # header size
   discard s.read_u32()  # FIXME: verify chunk size
 
@@ -55,8 +56,10 @@ proc marcoDump(inputBin: Stream): string =
     resIDs[i] = s.read_u32()
 
   # Read "XML nodes"
-  var indent = ""
-  var stack = newSeq[string]()
+  var
+    indent = ""
+    stack = newSeq[string]()
+    prevLineNo = 1'u32
   while not s.Stream.atEnd:
     let
       chunkType = s.read_u16()
@@ -64,12 +67,14 @@ proc marcoDump(inputBin: Stream): string =
       chunkSize = s.read_u32()  # FIXME: verify
       lineNo = s.read_u32()
     s.expect(0xffff_ffff'u32)  # comment index
+    if lineNo < prevLineNo:    # verify lineNo
+      raise newException(ExpectationError, "expected increasing lineNo, got " & $lineNo & " < " & $prevLineNo)
     case chunkType.ChunkType
     of ctXMLStartNS:
       let
         nsPrefix = s.read_u32().int
         nsURI = s.read_u32().int
-      result.add(indent & "N: " & pool[nsPrefix] & "=" & pool[nsURI] & " (line=" & $lineNo & ")\n")
+      result.add(indent & "N: " & pool[nsPrefix] & "=" & pool[nsURI] & "\n")
       indent.add("  ")
       stack.add("N " & nsPrefix.toHex & " " & nsURI.toHex)
     of ctXMLEndNS:
@@ -94,7 +99,7 @@ proc marcoDump(inputBin: Stream): string =
       result.add(indent & "E: ")
       if ns != 0xffff_ffff'u32:
         result.add(pool[ns.int] & ":")
-      result.add(pool[name] & " (line=" & $lineNo & ")\n")
+      result.add(pool[name] & "\n")
       indent.add("  ")
       stack.add("E " & ns.toHex & " " & name.toHex)
       # Attributes
