@@ -9,6 +9,7 @@ import tables
 import critbits
 
 import blob
+import consts
 
 # References:
 # - https://github.com/aosp-mirror/platform_frameworks_base/blob/e5cf74326dc37e87c24016640b535a269499e1ec/tools/aapt/XMLNode.cpp#L1089
@@ -16,9 +17,6 @@ import blob
 # - https://github.com/sdklite/aapt/blob/9e6d1ad98469dffbc9940821551bd7a2e07dd1e0/src/main/java/com/sdklite/aapt/AssetEditor.java
 
 type
-  DataType = enum
-    dtString = 0x03,
-    dtInt = 0x10
   KnownAttr = object
     name: string
     rawDefault: string  # "" means none
@@ -28,15 +26,6 @@ type
     res: OrderedSet[string]
     other: OrderedSet[string]
   ManifestError* = object of CatchableError
-
-  ChunkType = enum
-    ctStringPool = 0x0001'u16
-    ctXML = 0x0003'u16
-    ctXMLStartNS = 0x0100'u16
-    ctXMLEndNS = 0x0101'u16
-    ctXMLStartElement = 0x0102'u16
-    ctXMLEndElement = 0x0103'u16
-    ctXMLResourceMap = 0x0180'u16
 
 const
   nsAndroid = "http://schemas.android.com/apk/res/android"
@@ -211,7 +200,7 @@ proc renderXML(res: var Blob, xml: XmlNode, stringsMap: CritBitTree[uint32], lin
 
   # Render attributes
   for k, v in attrs:
-    echo k, "=", v
+    # echo k, "=", v
     let (ns, attr) = k.splitQName
     if ns == "android":
       res.put32(stringsMap[nsAndroid])

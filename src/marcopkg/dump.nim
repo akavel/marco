@@ -4,14 +4,19 @@
 
 {.experimental: "codeReordering".}
 import streams
-include marco
+import strutils
+
+import consts
 
 type
   MarcoStream = distinct Stream
   ProtocolError* = object of CatchableError
   ExpectationError* = object of CatchableError
 
-proc marcoDump(inputBin: Stream): string =
+proc marcoDump*(inputBin: string): string {.inline.} =
+  return marcoDump(newStringStream(inputBin))
+
+proc marcoDump*(inputBin: Stream): string =
   var s = inputBin.MarcoStream
 
   # File header
@@ -169,17 +174,17 @@ proc read_u8(s): uint8 =
     raise newException(ProtocolError, "expected 1 bytes for uint8, found only $# (hex $#)" % [$buf.len, toHex(buf)])
   return buf[0].uint8
 
-proc expect*(s; want: uint32) =
+proc expect(s; want: uint32) =
   let have = s.read_u32()
   if have != want:
     raise newException(ExpectationError, "expected $# (hex $#), got $# (hex $#)" % [$want, toHex(want), $have, toHex(have)])
 
-proc expect*(s; want: uint16) =
+proc expect(s; want: uint16) =
   let have = s.read_u16()
   if have != want:
     raise newException(ExpectationError, "expected $# (hex $#), got $# (hex $#)" % [$want, toHex(want), $have, toHex(have)])
 
-proc expect*(s; want: uint8) =
+proc expect(s; want: uint8) =
   let have = s.read_u8()
   if have != want:
     raise newException(ExpectationError, "expected $# (hex $#), got $# (hex $#)" % [$want, toHex(want), $have, toHex(have)])

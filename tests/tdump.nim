@@ -1,8 +1,10 @@
 {.experimental: "codeReordering".}
 import unittest
 import streams
+import strutils
 import re
-include marcopkg / dump
+
+import marcopkg / dump
 
 test "Custom binary AndroidManifest.xml dump":
   let binary = strip_space"""
@@ -98,7 +100,7 @@ ffff ffff 0e00 0000 0301 1000 1800 0000
 0101 1000 1800 0000 0c00 0000 ffff ffff
 0400 0000 0500 0000
 """.dehexify
-  let dump = marcoDump(newStringStream(binary))
+  let dump = marcoDump(binary)
   let expected = purgeLineMarkers"""
 Binary XML
 N: android=http://schemas.android.com/apk/res/android (line=2)
