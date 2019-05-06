@@ -11,7 +11,9 @@ Usage
 -----
 
     $ git clone https://github.com/akavel/marco
+    $ cd marco
     $ nimble build
+    
     $ cat src/AndroidManifest.xml
     <?xml version="1.0" encoding="utf-8"?>
     <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -34,4 +36,3 @@ References
  - https://github.com/aosp-mirror/platform_frameworks_base/blob/e5cf74326dc37e87c24016640b535a269499e1ec/tools/aapt/XMLNode.cpp#L1089
  - https://android.googlesource.com/platform/frameworks/base/+/dc36bb6dea837608c29c177a7ea8cf46b6a0cd53/tools/aapt/XMLNode.cpp
  - https://github.com/golang/mobile/blob/master/cmd/gomobile/binary_xml.go
-
