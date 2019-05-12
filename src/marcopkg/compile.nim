@@ -40,10 +40,12 @@ const
   ].toTable
 
 
+
 proc marcoCompile*(inputXml: string): string =
+  return marcoCompile(parseXml(inputXml))
+
+proc marcoCompile*(xml: XmlNode): string =
   # Parse + verify namespaces in a dumb, hacky way
-  let
-    xml = parseXml(inputXml)
   if xml.tag != "manifest":
     raise newException(ManifestError, "root node must be <manifest>")
   if not xml.attrs.hasKey("xmlns:android"):

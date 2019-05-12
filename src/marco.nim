@@ -1,7 +1,9 @@
-# This is just an example to get you started. A typical hybrid package
-# uses this file as the main entry point of the application.
+{.experimental: "codeReordering".}
+import streams
+import xmlparser
+import marcopkg/compile
 
-import marcopkg/submodule
+# when isMainModule:
 
-when isMainModule:
-  echo(getWelcomeMessage())
+# stdout.write(marcoCompile(parseXml(newFileStream(stdin))))
+stdout.write(stdin.newFileStream.parseXml.marcoCompile)

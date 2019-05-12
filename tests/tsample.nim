@@ -3,7 +3,7 @@ import unittest
 import strutils
 import re
 
-import marcopkg / marco
+import marcopkg / compile
 import marcopkg / dump
 
 test "AndroidManifest.xml based on czak/minimal-android-project":
