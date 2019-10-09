@@ -125,10 +125,10 @@ proc marcoDump*(inputBin: Stream): string =
         if name < resIDs.len:
           result.add("(0x" & resIDs[name].toHex & ")")
         result.add("=")
-        case dataType.DataType
-        of dtString:
+        case dataType
+        of dtString.uint8:
           result.add("\"" & pool[data.int] & "\"")
-        of dtInt:
+        of dtInt.uint8:
           result.add($data)
         else:
           raise newException(ExpectationError, "unknown attribute type: 0x" & dataType.toHex)
