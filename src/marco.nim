@@ -10,8 +10,8 @@ var
 
 for kind, key, val in getopt():
   case key
-  of "i": input = val.openFileStream
-  of "o": output = val.openFileStream
+  of "i": input = val.openFileStream(fmRead)
+  of "o": output = val.openFileStream(fmWrite)
   else:
     stderr.write("unknown flag: " & key)
     quit(1)
