@@ -99,6 +99,7 @@ proc marcoCompile*(xml: XmlNode): string =
     for c in s:
       res.put16 c.ord.uint16
     res.put16 0
+  res.pad32() # Note: when chunk size was not rounded to 4 bytes, I got a validation error
   res[stringsSizeSlot] = res.pos - stringsPos
 
   # Render "XML resource map"
