@@ -11,15 +11,21 @@ type
   Slots32*[T] = distinct TSlots32[T]
   TSlots32[T] = Table[T, seq[Slot32]]
 
-proc reserve*(b: var Blob, n: int) {.inline.} =
+proc skip*(b: var Blob, n: int) {.inline.} =
   let pos = b.string.len
   b.string.setLen(pos + n)
   for i in pos ..< b.string.len:
     b.string[i] = chr(0)
 
+template `>>:`*(slot32: Slot32, slot: untyped): untyped =
+  let slot = slot32
+
+proc `>>`*(slot32: Slot32, slot: var Slot32) =
+  slot = slot32
+
 proc slot32*(b: var Blob): Slot32 {.inline.} =
   result = b.string.len.Slot32
-  b.reserve(4)
+  b.skip(4)
 
 proc set*(b: var Blob, slot: Slot32, v: uint32) =
   let i = slot.int
@@ -29,9 +35,12 @@ proc set*(b: var Blob, slot: Slot32, v: uint32) =
   b.string[i+2] = chr(v shr 16 and 0xff)
   b.string[i+3] = chr(v shr 24 and 0xff)
 
+proc `[]=`*(b: var Blob, slot: Slot32, v: uint32) =
+  b.set(slot, v)
+
 proc pad32*(b: var Blob) {.inline.} =
   let n = (4 - (b.string.len mod 4)) mod 4
-  b.reserve(n)
+  b.skip(n)
 
 proc puts*(b: var Blob, v: string) =
   if v.len == 0:
@@ -47,6 +56,9 @@ proc putc*(b: var Blob, v: char) {.inline.} =
 
 proc put32*(b: var Blob, v: uint32) =
   b.set(b.slot32, v)
+
+proc put32*(b: var Blob): Slot32 =
+  b.slot32()
 
 proc put16*(b: var Blob, v: uint16) =
   # Little-endian
@@ -89,15 +101,19 @@ proc pos*(b: var Blob): uint32 {.inline.} =
   return b.string.len.uint32
 
 
-proc newSlots32*[T](): Slots32[T] {.inline.} =
-  return initTable[T, seq[Slot32]]().Slots32[:T]
-
 proc add*[T](slots: var Slots32[T], key: T, val: Slot32) =
-  slots.TSlots32[:T].mgetOrPut(key, newSeq[Slot32]()).add(val)
+  slots.madd(key) = val
+proc madd*[T](slots: var Slots32[T], key: T): var Slot32 =
+  var s = slots.TSlots32[:T].mgetOrPut(key, newSeq[Slot32]()).addr
+  s[].add(0.Slot32)
+  s[][^1]
 
 proc setAll*[T](slots: Slots32[T], key: T, val: uint32, blob: var Blob) =
   if not slots.TSlots32[:T].contains(key):
     return
   for slot in slots.TSlots32[:T][key]:
     blob.set(slot, val)
+
+proc len*[T](slots: Slots32[T]): int = slots.TSlots32[:T].len
+
 

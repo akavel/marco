@@ -73,47 +73,48 @@ proc marcoCompile*(xml: XmlNode): string =
 
   # Partially render header
   var res: Blob
-  res.put16(ctXML.ord)
-  res.put16(8)  # header size
-  var fileSizeSlot = res.slot32()
+  res.put16 ctXML.ord
+  res.put16 8   # header size
+  res.put32 >>: fileSizeSlot
 
   # Render list of strings
   let stringsPos = res.pos
-  res.put16(ctStringPool.ord)
-  res.put16(0x1c)  # header size
-  var stringsSizeSlot = res.slot32()
-  res.put32(uint32(strings.len))
-  res.put32(0)  # style count
-  res.put32(0)  # flags TODO(akavel): try writing utf-8, not utf-16
-  var stringsStartSlot = res.slot32()
-  res.put32(0)  # styles start
+  res.put16 ctStringPool.ord
+  res.put16 0x1c   # header size
+  res.put32 >>: stringsSizeSlot
+  res.put32 uint32(strings.len)
+  res.put32 0   # style count
+  res.put32 0   # flags TODO(akavel): try writing utf-8, not utf-16
+  res.put32 >>: stringsStartSlot
+  res.put32 0   # styles start
   var stringOffsetSlots = newSeq[Slot32]()
   for i in 0 ..< strings.len:
-    stringOffsetSlots.add(res.slot32())
+    res.put32 >>: slot
+    stringOffsetSlots.add slot
   let stringsStartPos = res.pos
-  res.set(stringsStartSlot, stringsStartPos - stringsPos)
+  res[stringsStartSlot] = stringsStartPos - stringsPos
   for i, s in strings:
-    res.set(stringOffsetSlots[i], res.pos - stringsStartPos)
-    res.put16(s.len.uint16)  # TODO: handle longer strings
+    res[stringOffsetSlots[i]] = res.pos - stringsStartPos
+    res.put16 s.len.uint16   # TODO: handle longer strings
     for c in s:
-      res.put16(c.ord.uint16)
-    res.put16(0)
-  res.set(stringsSizeSlot, res.pos - stringsPos)
+      res.put16 c.ord.uint16
+    res.put16 0
+  res[stringsSizeSlot] = res.pos - stringsPos
 
   # Render "XML resource map"
   let resMapPos = res.pos
-  res.put16(ctXMLResourceMap.ord)
-  res.put16(8)  # header size
-  let resMapSizeSlot = res.slot32()
+  res.put16 ctXMLResourceMap.ord
+  res.put16 8   # header size
+  res.put32 >>: resMapSizeSlot
   for s in resources:
-    res.put32(knownResources[s])
-  res.set(resMapSizeSlot, res.pos - resMapPos)
+    res.put32 knownResources[s]
+  res[resMapSizeSlot] = res.pos - resMapPos
 
   # Render XML tree
   var lineNo = 2'u32
   renderXML(res, xml, stringsMap, lineNo)
 
-  res.set(fileSizeSlot, res.pos)
+  res[fileSizeSlot] = res.pos
   result = res.string
 
 proc collectStrings(xml: XmlNode): (OrderedSet[string], OrderedSet[string]) =
@@ -165,32 +166,32 @@ proc renderXML(res: var Blob, xml: XmlNode, stringsMap: CritBitTree[uint32], lin
     newNS = true
     let (pos, sizeSlot) = res.putXML(ctXMLStartNS, lineNo)
     dec(lineNo)
-    res.put32(stringsMap["android"])
-    res.put32(stringsMap[xml.attrs["xmlns:android"]])
-    res.set(sizeSlot, res.pos - pos)
+    res.put32 stringsMap["android"]
+    res.put32 stringsMap[xml.attrs["xmlns:android"]]
+    res[sizeSlot] = res.pos - pos
 
   # Render XML element start
   let (pos, sizeSlot) = res.putXML(ctXMLStartElement, lineNo)
   let (ns, tag) = xml.tag.splitQName
-  res.put32(0xffff_ffff'u32)  # TODO: handle namespaces
-  res.put32(stringsMap[tag])
-  res.put16(0x14'u16)  # attr start
-  res.put16(0x14'u16)  # attr size
+  res.put32 0xffff_ffff'u32   # TODO: handle namespaces
+  res.put32 stringsMap[tag]
+  res.put16 0x14'u16   # attr start
+  res.put16 0x14'u16   # attr size
   var attrs = xml.attrs.stripNamespaces()
-  res.put16(attrs.len.uint16)
-  res.put16(0)  # ID index
-  res.put16(0)  # class index
-  res.put16(0)  # style index
+  res.put16 attrs.len.uint16
+  res.put16 0   # ID index
+  res.put16 0   # class index
+  res.put16 0   # style index
 
   # Render attributes
   for k, v in attrs:
     # echo k, "=", v
     let (ns, attr) = k.splitQName
     if ns == "android":
-      res.put32(stringsMap[nsAndroid])
+      res.put32 stringsMap[nsAndroid]
     else:
-      res.put32(0xffff_ffff'u32)  # TODO: handle other namespaces too
-    res.put32(stringsMap[attr])
+      res.put32 0xffff_ffff'u32   # TODO: handle other namespaces too
+    res.put32 stringsMap[attr]
     var
       typ = dtString
       raw = stringsMap[v]
@@ -201,14 +202,14 @@ proc renderXML(res: var Blob, xml: XmlNode, stringsMap: CritBitTree[uint32], lin
       typ = isKnown.get.typ
       if isKnown.get.stripRaw:
         raw = 0xffff_ffff'u32
-    res.put32(raw)
-    res.put16(8)      # size
-    res.putc(chr(0))  # res0
-    res.putc(chr(typ.ord))
+    res.put32 raw
+    res.put16 8       # size
+    res.putc chr(0)   # res0
+    res.putc chr(typ.ord)
     if typ == dtInt:
       data = v.parseInt.uint32
-    res.put32(data)
-  res.set(sizeSlot, res.pos - pos)
+    res.put32 data
+  res[sizeSlot] = res.pos - pos
 
   # Render child elements
   for child in xml:
@@ -216,26 +217,26 @@ proc renderXML(res: var Blob, xml: XmlNode, stringsMap: CritBitTree[uint32], lin
 
   # Render XML element end
   let (posEnd, sizeSlotEnd) = res.putXML(ctXMLEndElement, lineNo)
-  res.put32(0xffff_ffff'u32)  # TODO: handle namespaces
-  res.put32(stringsMap[tag])
-  res.set(sizeSlotEnd, res.pos - posEnd)
+  res.put32 0xffff_ffff'u32   # TODO: handle namespaces
+  res.put32 stringsMap[tag]
+  res[sizeSlotEnd] = res.pos - posEnd
 
   # Close an XML namespace, if needed
   if newNS:
     dec(lineNo)
     let (pos, sizeSlot) = res.putXML(ctXMLEndNS, lineNo)
-    res.put32(stringsMap["android"])
-    res.put32(stringsMap[xml.attrs["xmlns:android"]])
-    res.set(sizeSlot, res.pos - pos)
+    res.put32 stringsMap["android"]
+    res.put32 stringsMap[xml.attrs["xmlns:android"]]
+    res[sizeSlot] = res.pos - pos
 
 proc putXML(res: var Blob, typ: ChunkType, lineNo: var uint32): tuple[pos: uint32, sizeSlot: Slot32] =
   result.pos = res.pos
-  res.put16(typ.ord.uint16)
-  res.put16(0x10'u16)
-  result.sizeSlot = res.slot32()
-  res.put32(lineNo)
+  res.put16 typ.ord.uint16
+  res.put16 0x10'u16
+  res.put32 >> result.sizeSlot
+  res.put32 lineNo
   inc(lineNo)
-  res.put32(0xffff_ffff'u32)  # comment index
+  res.put32 0xffff_ffff'u32   # comment index
 
 proc stripNamespaces(attrs: XmlAttributes): CritBitTree[string] =
   if attrs == nil:
